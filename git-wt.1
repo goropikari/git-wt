@@ -16,6 +16,10 @@ passes arguments through to
 .BR git worktree .
 
 For
+.B git wt remove
+the final argument may be either a worktree path or a branch name.
+
+For
 .B git wt add
 it first runs
 .B git worktree add
@@ -36,6 +40,11 @@ and then copy matching ignored paths into the new worktree.
 .TP
 .B help
 Show the built-in short help text.
+.TP
+.B remove
+Run
+.B git worktree remove
+with a worktree path, or resolve a branch name to its worktree path first.
 .TP
 .B *
 Any other subcommand is passed through to
@@ -63,6 +72,7 @@ returns a non-zero status and leaves the created worktree in place.
 .nf
 git wt add ../feature-worktree
 git wt list
+git wt remove feature-worktree
 git wt remove ../feature-worktree
 .fi
 .SH SEE ALSO

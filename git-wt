@@ -60,6 +60,7 @@ Git plugin for git worktree.
 
 subcommands:
   add       run git worktree add, then copy .worktreeinclude matches
+  remove    remove a worktree by path or branch name
   help      show this help
   *         any other subcommand is passed through to git worktree
 
@@ -78,6 +79,64 @@ list_worktrees() {
 			printf '%s\n' "${line#worktree }"
 		fi
 	done
+}
+
+find_worktree_by_branch() {
+	local branch_name="$1"
+	local line
+	local current_path=''
+	local current_branch=''
+	local -a matches=()
+
+	while IFS= read -r line; do
+		if [[ -z "$line" ]]; then
+			if [[ "$current_branch" == "refs/heads/$branch_name" ]]; then
+				matches+=("$current_path")
+			fi
+			current_path=''
+			current_branch=''
+			continue
+		fi
+
+		case "$line" in
+		worktree\ *)
+			current_path="${line#worktree }"
+			;;
+		branch\ *)
+			current_branch="${line#branch }"
+			;;
+		esac
+	done < <(git worktree list --porcelain)
+
+	if [[ -n "$current_path" && "$current_branch" == "refs/heads/$branch_name" ]]; then
+		matches+=("$current_path")
+	fi
+
+	if [[ "${#matches[@]}" -eq 1 ]]; then
+		printf '%s\n' "${matches[0]}"
+		return 0
+	fi
+
+	if [[ "${#matches[@]}" -eq 0 ]]; then
+		printf 'no worktree found for branch: %s\n' "$branch_name" >&2
+		return 1
+	fi
+
+	printf 'multiple worktrees found for branch: %s\n' "$branch_name" >&2
+	return 1
+}
+
+is_worktree_path() {
+	local candidate="$1"
+	local path
+
+	while IFS= read -r path; do
+		if [[ "$path" == "$candidate" ]]; then
+			return 0
+		fi
+	done < <(list_worktrees)
+
+	return 1
 }
 
 # `git worktree add` accepts many argument forms. Instead of parsing
@@ -348,6 +407,29 @@ handle_add() {
 	return 0
 }
 
+handle_remove() {
+	local target
+	local resolved_path
+	local -a args=()
+
+	if [[ "$#" -eq 0 ]]; then
+		exec git worktree remove
+	fi
+
+	args=("$@")
+	target="${args[$(($# - 1))]}"
+
+	if [[ -e "$target" || -L "$target" ]]; then
+		if is_worktree_path "$target"; then
+			exec git worktree remove "${args[@]}"
+		fi
+	fi
+
+	resolved_path="$(find_worktree_by_branch "$target")" || return $?
+	args[$# - 1]="$resolved_path"
+	exec git worktree remove "${args[@]}"
+}
+
 main() {
 	local subcommand
 
@@ -364,6 +446,9 @@ main() {
 		;;
 	add)
 		handle_add "$@"
+		;;
+	remove)
+		handle_remove "$@"
 		;;
 	*)
 		exec git worktree "$subcommand" "$@"

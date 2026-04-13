@@ -53,6 +53,11 @@ assert_file_contains() {
 	grep -F -- "$expected" "$path" >/dev/null || fail "expected $path to contain: $expected"
 }
 
+assert_dir_not_exists() {
+	local path="$1"
+	[[ ! -d "$path" ]] || fail "expected directory to be absent: $path"
+}
+
 assert_command_output_eq() {
 	local left="$1"
 	local right="$2"
@@ -236,6 +241,87 @@ test_install_script_installs_and_uninstalls() {
 	assert_not_exists "$install_root/share/man/man1/git-wt.1"
 }
 
+test_remove_resolves_branch_to_worktree() {
+	local repo
+	local worktree
+
+	repo="$(make_repo remove-branch)"
+	worktree="$TEST_TMP_ROOT/remove-branch-wt"
+
+	run_git_wt "$repo" add "$worktree" -b feature
+
+	assert_exists "$worktree"
+	run_git_wt "$repo" remove feature
+	assert_dir_not_exists "$worktree"
+}
+
+test_remove_resolves_branch_with_force_option() {
+	local repo
+	local worktree
+
+	repo="$(make_repo remove-branch-force)"
+	worktree="$TEST_TMP_ROOT/remove-branch-force-wt"
+
+	run_git_wt "$repo" add "$worktree" -b feature-force
+	printf 'dirty\n' >"$worktree/untracked.txt"
+
+	assert_exists "$worktree"
+	run_git_wt "$repo" remove -f feature-force
+	assert_dir_not_exists "$worktree"
+}
+
+test_remove_prefers_existing_path_over_branch_name() {
+	local repo
+	local worktree
+	local branch_name
+
+	repo="$(make_repo remove-path-preferred)"
+	worktree="$TEST_TMP_ROOT/remove-path-preferred-wt"
+	branch_name="$(basename "$worktree")"
+
+	run_git_wt "$repo" add "$worktree" -b "$branch_name"
+
+	assert_exists "$worktree"
+	run_git_wt "$repo" remove "$worktree"
+	assert_dir_not_exists "$worktree"
+}
+
+test_remove_falls_back_when_existing_path_is_not_worktree() {
+	local repo
+	local worktree
+	local branch_name
+
+	repo="$(make_repo remove-path-fallback)"
+	worktree="$TEST_TMP_ROOT/remove-path-fallback-wt"
+	branch_name='foo'
+
+	run_git_wt "$repo" add "$worktree" -b "$branch_name"
+	mkdir -p -- "$repo/$branch_name"
+
+	assert_exists "$worktree"
+	assert_exists "$repo/$branch_name"
+	run_git_wt "$repo" remove "$branch_name"
+	assert_dir_not_exists "$worktree"
+	assert_exists "$repo/$branch_name"
+}
+
+test_remove_unknown_branch_returns_nonzero() {
+	local repo
+	local stderr_file
+	local status=0
+
+	repo="$(make_repo remove-missing-branch)"
+	stderr_file="$TEST_TMP_ROOT/remove-missing-branch.err"
+
+	set +e
+	run_git_wt "$repo" remove missing-branch 2>"$stderr_file"
+	status=$?
+	set -e
+
+	[[ "$status" -ne 0 ]] || fail "expected nonzero exit code for unknown branch"
+	assert_file_contains "$stderr_file" 'no worktree found for branch: missing-branch'
+}
+
 run_test() {
 	local name="$1"
 
@@ -252,6 +338,11 @@ main() {
 	run_test test_add_copies_symlink_and_empty_dir
 	run_test test_missing_worktreeinclude_is_noop
 	run_test test_copy_failure_returns_nonzero_and_preserves_worktree
+	run_test test_remove_resolves_branch_to_worktree
+	run_test test_remove_resolves_branch_with_force_option
+	run_test test_remove_prefers_existing_path_over_branch_name
+	run_test test_remove_falls_back_when_existing_path_is_not_worktree
+	run_test test_remove_unknown_branch_returns_nonzero
 	run_test test_install_script_installs_and_uninstalls
 }
 
