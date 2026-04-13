@@ -1,0 +1,374 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+progress_enabled=0
+
+cleanup_files=()
+
+# Remove temporary files and directories created while evaluating
+# .worktreeinclude and detecting the new worktree path.
+cleanup() {
+	local path
+	for path in "${cleanup_files[@]}"; do
+		[[ -n "$path" && -e "$path" ]] && rm -rf -- "$path"
+	done
+	return 0
+}
+
+trap cleanup EXIT
+
+# Bash passes strings around, so these helpers assign mktemp output to
+# a caller-provided variable name.
+make_temp_file() {
+	local output_name="$1"
+	local path
+	path="$(mktemp)"
+	cleanup_files+=("$path")
+	printf -v "$output_name" '%s' "$path"
+}
+
+make_temp_dir() {
+	local output_name="$1"
+	local path
+	path="$(mktemp -d)"
+	cleanup_files+=("$path")
+	printf -v "$output_name" '%s' "$path"
+}
+
+emit_progress() {
+	local current="$1"
+	local total="$2"
+	local rel_path="$3"
+
+	if [[ "$progress_enabled" -eq 1 ]]; then
+		printf '\r[%d/%d] %s' "$current" "$total" "$rel_path" >&2
+	fi
+}
+
+finish_progress() {
+	if [[ "$progress_enabled" -eq 1 ]]; then
+		printf '\n' >&2
+	fi
+}
+
+print_help() {
+	cat <<'EOF'
+usage: git wt <subcommand> [args...]
+
+Git plugin for git worktree.
+
+subcommands:
+  add       run git worktree add, then copy .worktreeinclude matches
+  help      show this help
+  *         any other subcommand is passed through to git worktree
+
+.worktreeinclude:
+  - must be placed at the repository root
+  - uses .gitignore syntax
+  - only ignored paths are copied
+EOF
+}
+
+# Parse `git worktree list --porcelain` and keep only the actual
+# filesystem paths of each worktree.
+list_worktrees() {
+	git worktree list --porcelain | while IFS= read -r line; do
+		if [[ "$line" == worktree\ * ]]; then
+			printf '%s\n' "${line#worktree }"
+		fi
+	done
+}
+
+# `git worktree add` accepts many argument forms. Instead of parsing
+# argv ourselves, compare worktree lists before and after execution
+# and pick the single newly added path.
+detect_new_worktree() {
+	local before_file="$1"
+	local after_file="$2"
+	local path
+	local -A before=()
+	local -a new_paths=()
+
+	while IFS= read -r path; do
+		[[ -n "$path" ]] || continue
+		before["$path"]=1
+	done <"$before_file"
+
+	while IFS= read -r path; do
+		[[ -n "$path" ]] || continue
+		if [[ -z "${before[$path]+x}" ]]; then
+			new_paths+=("$path")
+		fi
+	done <"$after_file"
+
+	if [[ "${#new_paths[@]}" -ne 1 ]]; then
+		printf 'failed to determine the new worktree path\n' >&2
+		return 1
+	fi
+
+	printf '%s\n' "${new_paths[0]}"
+}
+
+# Enumerate every path in the source worktree except `.git`, keeping
+# paths relative to the repository root so they can be copied as-is
+# into the destination worktree.
+collect_repo_entries() {
+	local repo_root="$1"
+	local entries_name="$2"
+	local rel_path
+
+	eval "$entries_name=()"
+	while IFS= read -r -d '' rel_path; do
+		eval "$entries_name+=(\"\$rel_path\")"
+	done < <(
+		cd "$repo_root" &&
+			find . \
+				\( -path './.git' -o -path './.git/*' \) -prune -o \
+				-mindepth 1 -printf '%P\0' |
+			LC_ALL=C sort -z
+	)
+}
+
+# Ask Git which paths are ignored.
+# - "standard" mode uses the real repository ignore rules.
+# - "include" mode evaluates `.worktreeinclude` in an isolated temp repo
+#   so only that file's patterns participate in the match result.
+# The intersection of these two sets becomes the copy target list.
+build_ignore_match_set() {
+	local repo_root="$1"
+	local include_file="$2"
+	local mode="$3"
+	local entries_name="$4"
+	local output_name="$5"
+	local entry
+	local match_path
+	local _source line _pattern path
+	local temp_repo
+	local -n entries_ref="$entries_name"
+
+	eval "$output_name=()"
+
+	if [[ "${#entries_ref[@]}" -eq 0 ]]; then
+		return 0
+	fi
+
+	if [[ "$mode" == "standard" ]]; then
+		while IFS= read -r -d '' _source &&
+			IFS= read -r -d '' line &&
+			IFS= read -r -d '' _pattern &&
+			IFS= read -r -d '' path; do
+			path="${path%/}"
+			eval "${output_name}[\"\$path\"]=1"
+		done < <(
+			{
+				for entry in "${entries_ref[@]}"; do
+					match_path="$entry"
+					if [[ -d "$repo_root/$entry" && ! -L "$repo_root/$entry" ]]; then
+						match_path="$entry/"
+					fi
+					printf '%s\0' "$match_path"
+				done |
+					git -C "$repo_root" check-ignore --stdin -z -v --no-index
+			} || true
+		)
+		return 0
+	fi
+
+	make_temp_dir temp_repo
+	git init -q "$temp_repo"
+	cp -- "$include_file" "$temp_repo/.gitignore"
+
+	while IFS= read -r -d '' _source &&
+		IFS= read -r -d '' line &&
+		IFS= read -r -d '' _pattern &&
+		IFS= read -r -d '' path; do
+		path="${path%/}"
+		eval "${output_name}[\"\$path\"]=1"
+	done < <(
+		{
+			for entry in "${entries_ref[@]}"; do
+				match_path="$entry"
+				if [[ -d "$repo_root/$entry" && ! -L "$repo_root/$entry" ]]; then
+					match_path="$entry/"
+				fi
+				printf '%s\0' "$match_path"
+			done |
+				git -C "$temp_repo" check-ignore --stdin -z -v --no-index
+		} || true
+	)
+}
+
+collect_copy_targets() {
+	local repo_root="$1"
+	local include_file="$2"
+	local output_name="$3"
+	local entry
+	local -a entries=()
+	local -A ignored_matches=()
+	local -A include_matches=()
+
+	collect_repo_entries "$repo_root" entries
+	build_ignore_match_set "$repo_root" "$include_file" standard entries ignored_matches
+	build_ignore_match_set "$repo_root" "$include_file" include entries include_matches
+
+	eval "$output_name=()"
+	for entry in "${entries[@]}"; do
+		if [[ "$entry" == ".worktreeinclude" ]]; then
+			continue
+		fi
+		if [[ -n "${ignored_matches[$entry]+x}" && -n "${include_matches[$entry]+x}" ]]; then
+			eval "$output_name+=(\"\$entry\")"
+		fi
+	done
+}
+
+# Recreate a single relative path inside the new worktree.
+# Existing destinations are preserved and reported as skipped.
+copy_target() {
+	local repo_root="$1"
+	local destination_root="$2"
+	local rel_path="$3"
+	local source_path="$repo_root/$rel_path"
+	local destination_path="$destination_root/$rel_path"
+	local parent_dir
+	local link_target
+
+	if [[ -L "$source_path" ]]; then
+		parent_dir="$(dirname -- "$destination_path")"
+		if ! mkdir -p -- "$parent_dir"; then
+			printf 'failed to create parent directory for %s\n' "$rel_path" >&2
+			return 1
+		fi
+		if [[ -e "$destination_path" || -L "$destination_path" ]]; then
+			printf 'skipped existing path: %s\n' "$rel_path" >&2
+			return 0
+		fi
+		link_target="$(readlink -- "$source_path")"
+		if ! ln -s -- "$link_target" "$destination_path"; then
+			printf 'failed to copy symlink: %s\n' "$rel_path" >&2
+			return 1
+		fi
+		return 0
+	fi
+
+	if [[ -d "$source_path" ]]; then
+		if [[ -e "$destination_path" && ! -d "$destination_path" ]]; then
+			printf 'destination exists and is not a directory: %s\n' "$rel_path" >&2
+			return 1
+		fi
+		mkdir -p -- "$destination_path"
+		return 0
+	fi
+
+	if [[ -f "$source_path" ]]; then
+		parent_dir="$(dirname -- "$destination_path")"
+		if ! mkdir -p -- "$parent_dir"; then
+			printf 'failed to create parent directory for %s\n' "$rel_path" >&2
+			return 1
+		fi
+		if [[ -e "$destination_path" || -L "$destination_path" ]]; then
+			printf 'skipped existing path: %s\n' "$rel_path" >&2
+			return 0
+		fi
+		if ! cp -p -- "$source_path" "$destination_path"; then
+			printf 'failed to copy file: %s\n' "$rel_path" >&2
+			return 1
+		fi
+		return 0
+	fi
+
+	printf 'unsupported path type: %s\n' "$rel_path" >&2
+	return 1
+}
+
+# `git wt add` is the only subcommand with custom behavior:
+# 1. delegate to `git worktree add`
+# 2. discover the newly created worktree
+# 3. compute ignored paths that also match `.worktreeinclude`
+# 4. copy them into the new worktree
+handle_add() {
+	local repo_root
+	local include_file
+	local before_file
+	local after_file
+	local new_worktree
+	local rel_path
+	local failed=0
+	local index=0
+	local total=0
+	local -a targets=()
+
+	repo_root="$(git rev-parse --show-toplevel)"
+	include_file="$repo_root/.worktreeinclude"
+	make_temp_file before_file
+	make_temp_file after_file
+
+	list_worktrees >"$before_file"
+
+	if ! git worktree add "$@"; then
+		return $?
+	fi
+
+	list_worktrees >"$after_file"
+	new_worktree="$(detect_new_worktree "$before_file" "$after_file")"
+
+	if [[ ! -f "$include_file" ]]; then
+		return 0
+	fi
+
+	include_file="$(readlink -f -- "$include_file")"
+	collect_copy_targets "$repo_root" "$include_file" targets
+
+	total="${#targets[@]}"
+	if [[ "$total" -eq 0 ]]; then
+		return 0
+	fi
+
+	if [[ -t 2 ]]; then
+		progress_enabled=1
+	fi
+
+	for rel_path in "${targets[@]}"; do
+		index=$((index + 1))
+		emit_progress "$index" "$total" "$rel_path"
+		if ! copy_target "$repo_root" "$new_worktree" "$rel_path"; then
+			failed=$((failed + 1))
+		fi
+	done
+
+	finish_progress
+
+	if [[ "$failed" -gt 0 ]]; then
+		printf 'worktree was created at %s, but copying ignored files failed for %d path(s)\n' \
+			"$new_worktree" "$failed" >&2
+		return 1
+	fi
+
+	return 0
+}
+
+main() {
+	local subcommand
+
+	if [[ "$#" -eq 0 ]]; then
+		exec git worktree
+	fi
+
+	subcommand="$1"
+	shift
+
+	case "$subcommand" in
+	help | --help | -h)
+		print_help
+		;;
+	add)
+		handle_add "$@"
+		;;
+	*)
+		exec git worktree "$subcommand" "$@"
+		;;
+	esac
+}
+
+main "$@"
