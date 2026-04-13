@@ -17,15 +17,36 @@ All other subcommands are passed through to `git worktree` unchanged.
 Git plugins work by placing an executable named `git-<name>` somewhere on your `PATH`.\
 This project provides `git-wt`, so once that executable is available on your `PATH`, you can run `git wt`.
 
-### Option 1: Clone and symlink
+### Quick install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/goropikari/git-wt/main/install.sh | bash
+```
+
+This installs:
+
+- `git-wt` to `~/.local/bin/git-wt`
+- `git-wt.1` to `~/.local/share/man/man1/git-wt.1`
+
+Then verify the installation:
+
+```bash
+git wt help
+git wt --help
+```
+
+### Install from a cloned repository
 
 ```bash
 git clone https://github.com/goropikari/git-wt.git
 cd git-wt
-chmod +x git-wt
-mkdir -p ~/.local/bin
-ln -sf "$(pwd)/git-wt" ~/.local/bin/git-wt
+make install
 ```
+
+This installs:
+
+- `git-wt` to `~/.local/bin/git-wt`
+- `git-wt.1` to `~/.local/share/man/man1/git-wt.1`
 
 If `~/.local/bin` is not already on your `PATH`, add it in your shell configuration:
 
@@ -33,20 +54,53 @@ If `~/.local/bin` is not already on your `PATH`, add it in your shell configurat
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
+If `~/.local/share/man` is not already on your `MANPATH`, add it as well:
+
+```bash
+export MANPATH="$HOME/.local/share/man:$MANPATH"
+```
+
 Then verify the installation:
 
 ```bash
 git wt help
+git wt --help
 ```
 
-### Option 2: Copy the script directly
+### Install to a custom prefix
 
 ```bash
-git clone https://github.com/goropikari/git-wt.git
-cd git-wt
-chmod +x git-wt
-mkdir -p ~/.local/bin
-cp git-wt ~/.local/bin/git-wt
+make install PREFIX=/usr/local
+```
+
+For the curl installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/goropikari/git-wt/main/install.sh | bash -s -- --prefix /usr/local
+```
+
+You can also stage an installation with `DESTDIR`:
+
+```bash
+make install PREFIX=/usr/local DESTDIR=/tmp/package-root
+```
+
+### Uninstall
+
+```bash
+make uninstall
+```
+
+For a custom prefix:
+
+```bash
+make uninstall PREFIX=/usr/local
+```
+
+For the curl installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/goropikari/git-wt/main/install.sh | bash -s -- --uninstall
 ```
 
 ## Usage

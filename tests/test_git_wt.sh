@@ -46,6 +46,13 @@ assert_symlink_target() {
 	[[ "$actual" == "$expected" ]] || fail "unexpected symlink target for $path"
 }
 
+assert_file_contains() {
+	local path="$1"
+	local expected="$2"
+
+	grep -F -- "$expected" "$path" >/dev/null || fail "expected $path to contain: $expected"
+}
+
 assert_command_output_eq() {
 	local left="$1"
 	local right="$2"
@@ -210,6 +217,25 @@ EOF
 	assert_not_exists "$worktree/.env.local"
 }
 
+test_install_script_installs_and_uninstalls() {
+	local install_root
+	local raw_base
+
+	install_root="$TEST_TMP_ROOT/install-root"
+	raw_base="file://$ROOT_DIR"
+
+	RAW_BASE_URL="$raw_base" PREFIX="$install_root" "$ROOT_DIR/install.sh"
+
+	assert_exists "$install_root/bin/git-wt"
+	assert_exists "$install_root/share/man/man1/git-wt.1"
+	assert_file_contains "$install_root/share/man/man1/git-wt.1" '.TH GIT-WT 1'
+
+	RAW_BASE_URL="$raw_base" PREFIX="$install_root" "$ROOT_DIR/install.sh" --uninstall
+
+	assert_not_exists "$install_root/bin/git-wt"
+	assert_not_exists "$install_root/share/man/man1/git-wt.1"
+}
+
 run_test() {
 	local name="$1"
 
@@ -226,6 +252,7 @@ main() {
 	run_test test_add_copies_symlink_and_empty_dir
 	run_test test_missing_worktreeinclude_is_noop
 	run_test test_copy_failure_returns_nonzero_and_preserves_worktree
+	run_test test_install_script_installs_and_uninstalls
 }
 
 main "$@"

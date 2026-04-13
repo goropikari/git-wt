@@ -17,15 +17,36 @@
 Git plugin は、`PATH` 上にある `git-<name>` という実行ファイルを `git <name>` として呼び出します。\
 このプロジェクトでは `git-wt` を `PATH` に置くことで `git wt` が使えるようになります。
 
-### 方法 1: clone して symlink を張る
+### すぐにインストールする
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/goropikari/git-wt/main/install.sh | bash
+```
+
+これにより次が配置されます。
+
+- `~/.local/bin/git-wt`
+- `~/.local/share/man/man1/git-wt.1`
+
+次でインストール確認ができます。
+
+```bash
+git wt help
+git wt --help
+```
+
+### clone してからインストールする
 
 ```bash
 git clone https://github.com/goropikari/git-wt.git
 cd git-wt
-chmod +x git-wt
-mkdir -p ~/.local/bin
-ln -sf "$(pwd)/git-wt" ~/.local/bin/git-wt
+make install
 ```
+
+これにより次が配置されます。
+
+- `~/.local/bin/git-wt`
+- `~/.local/share/man/man1/git-wt.1`
 
 `~/.local/bin` が `PATH` に入っていない場合は、シェル設定に追加してください。
 
@@ -33,20 +54,53 @@ ln -sf "$(pwd)/git-wt" ~/.local/bin/git-wt
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
+`~/.local/share/man` が `MANPATH` に入っていない場合は、こちらも追加してください。
+
+```bash
+export MANPATH="$HOME/.local/share/man:$MANPATH"
+```
+
 次でインストール確認ができます。
 
 ```bash
 git wt help
+git wt --help
 ```
 
-### 方法 2: スクリプトを直接コピーする
+### カスタム prefix にインストールする
 
 ```bash
-git clone https://github.com/goropikari/git-wt.git
-cd git-wt
-chmod +x git-wt
-mkdir -p ~/.local/bin
-cp git-wt ~/.local/bin/git-wt
+make install PREFIX=/usr/local
+```
+
+curl インストーラを使う場合:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/goropikari/git-wt/main/install.sh | bash -s -- --prefix /usr/local
+```
+
+`DESTDIR` を使ったステージングもできます。
+
+```bash
+make install PREFIX=/usr/local DESTDIR=/tmp/package-root
+```
+
+### アンインストール
+
+```bash
+make uninstall
+```
+
+カスタム prefix を使った場合:
+
+```bash
+make uninstall PREFIX=/usr/local
+```
+
+curl インストーラを使う場合:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/goropikari/git-wt/main/install.sh | bash -s -- --uninstall
 ```
 
 ## 使い方

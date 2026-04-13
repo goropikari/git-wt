@@ -1,0 +1,70 @@
+.TH GIT-WT 1 "April 2026" "git-wt" "Git Manual"
+.SH NAME
+git-wt \- git worktree wrapper with .worktreeinclude support
+.SH SYNOPSIS
+.B git wt
+.I <subcommand>
+[\fIargs...\fR]
+.SH DESCRIPTION
+.B git-wt
+is a Git plugin that wraps
+.BR git-worktree (1).
+
+For most subcommands,
+.B git wt
+passes arguments through to
+.BR git worktree .
+
+For
+.B git wt add
+it first runs
+.B git worktree add
+and, if that succeeds, copies paths from the source worktree into the
+newly created worktree when both of the following are true:
+.IP \(bu 2
+the path matches the repository-root
+.B .worktreeinclude
+file
+.IP \(bu 2
+the path is ignored by Git in the source worktree
+.SH SUBCOMMANDS
+.TP
+.B add
+Run
+.B git worktree add
+and then copy matching ignored paths into the new worktree.
+.TP
+.B help
+Show the built-in short help text.
+.TP
+.B *
+Any other subcommand is passed through to
+.BR git worktree .
+.SH WORKTREEINCLUDE
+The
+.B .worktreeinclude
+file must be placed at the repository root.
+
+Its syntax follows
+.BR .gitignore .
+
+Only paths that both match
+.B .worktreeinclude
+and are ignored by Git are copied.
+.SH EXIT STATUS
+If
+.B git worktree add
+fails, that failure is returned as-is.
+
+If worktree creation succeeds but one or more copy operations fail,
+.B git wt add
+returns a non-zero status and leaves the created worktree in place.
+.SH EXAMPLES
+.nf
+git wt add ../feature-worktree
+git wt list
+git wt remove ../feature-worktree
+.fi
+.SH SEE ALSO
+.BR git-worktree (1),
+.BR gitignore (5)
