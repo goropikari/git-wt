@@ -14,7 +14,7 @@ All other subcommands are passed through to `git worktree` unchanged.
 
 ## Installation
 
-Git plugins work by placing an executable named `git-<name>` somewhere on your `PATH`.  
+Git plugins work by placing an executable named `git-<name>` somewhere on your `PATH`.\
 This project provides `git-wt`, so once that executable is available on your `PATH`, you can run `git wt`.
 
 ### Option 1: Clone and symlink
@@ -59,7 +59,7 @@ git wt remove ../my-feature
 
 ## `.worktreeinclude`
 
-Place `.worktreeinclude` at the repository root.  
+Place `.worktreeinclude` at the repository root.\
 Its syntax follows `.gitignore`.
 
 Example:

@@ -14,7 +14,7 @@
 
 ## インストール
 
-Git plugin は、`PATH` 上にある `git-<name>` という実行ファイルを `git <name>` として呼び出します。  
+Git plugin は、`PATH` 上にある `git-<name>` という実行ファイルを `git <name>` として呼び出します。\
 このプロジェクトでは `git-wt` を `PATH` に置くことで `git wt` が使えるようになります。
 
 ### 方法 1: clone して symlink を張る
@@ -59,7 +59,7 @@ git wt remove ../my-feature
 
 ## `.worktreeinclude`
 
-`.worktreeinclude` はリポジトリルートに置きます。  
+`.worktreeinclude` はリポジトリルートに置きます。\
 構文は `.gitignore` 互換です。
 
 例:
