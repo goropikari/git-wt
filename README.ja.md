@@ -4,7 +4,7 @@
 
 `git wt add ...` は `git worktree add ...` に透過委譲したあと、リポジトリルートの `.worktreeinclude` に一致し、かつ Git で ignore されているファイルやディレクトリを、新しく作成した worktree にコピーします。
 
-`git wt remove ...` は worktree path または branch 名を受け付けます。それ以外のサブコマンドは `git worktree` にそのまま委譲します。
+`git wt remove ...` は worktree path または branch 名を受け付けます。`git wt update` はインストール済みの `git-wt` スクリプトを新しいダウンロード版に置き換えます。それ以外のサブコマンドは `git worktree` にそのまま委譲します。
 
 ## 動作要件
 
@@ -110,6 +110,7 @@ git wt add ../my-feature
 git wt list
 git wt remove my-feature
 git wt remove ../my-feature
+git wt update
 ```
 
 ## `.worktreeinclude`

@@ -241,6 +241,28 @@ test_install_script_installs_and_uninstalls() {
 	assert_not_exists "$install_root/share/man/man1/git-wt.1"
 }
 
+test_update_replaces_installed_script() {
+	local repo
+	local install_root
+	local installed_script
+	local raw_base
+
+	repo="$(make_repo update-script)"
+	install_root="$TEST_TMP_ROOT/update-root"
+	installed_script="$install_root/bin/git-wt"
+	raw_base="file://$ROOT_DIR"
+
+	mkdir -p -- "$install_root/bin"
+	cp -- "$ROOT_DIR/git-wt" "$installed_script"
+	perl -0pi -e 's/show this help/show stale help/' "$installed_script"
+
+	RAW_BASE_URL="$raw_base" PATH="$install_root/bin:$PATH" git -C "$repo" wt update >/dev/null
+
+	assert_not_exists "$installed_script.bak"
+	assert_file_contains "$installed_script" 'show this help'
+	! grep -F -- 'show stale help' "$installed_script" >/dev/null || fail "expected installed script to be replaced"
+}
+
 test_remove_resolves_branch_to_worktree() {
 	local repo
 	local worktree
@@ -344,6 +366,7 @@ main() {
 	run_test test_remove_falls_back_when_existing_path_is_not_worktree
 	run_test test_remove_unknown_branch_returns_nonzero
 	run_test test_install_script_installs_and_uninstalls
+	run_test test_update_replaces_installed_script
 }
 
 main "$@"

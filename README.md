@@ -4,7 +4,7 @@
 
 `git wt add ...` transparently delegates to `git worktree add ...`, then copies files and directories that match the repository-root `.worktreeinclude` file and are ignored by Git into the newly created worktree.
 
-`git wt remove ...` accepts either a worktree path or a branch name. All other subcommands are passed through to `git worktree` unchanged.
+`git wt remove ...` accepts either a worktree path or a branch name. `git wt update` replaces the installed `git-wt` script with the latest downloaded version. All other subcommands are passed through to `git worktree` unchanged.
 
 ## Requirements
 
@@ -110,6 +110,7 @@ git wt add ../my-feature
 git wt list
 git wt remove my-feature
 git wt remove ../my-feature
+git wt update
 ```
 
 ## `.worktreeinclude`

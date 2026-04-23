@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+REPO_OWNER="${REPO_OWNER:-goropikari}"
+REPO_NAME="${REPO_NAME:-git-wt}"
+REPO_REF="${REPO_REF:-main}"
+RAW_BASE_URL="${RAW_BASE_URL:-https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_REF}}"
+
 progress_enabled=0
 
 cleanup_files=()
@@ -61,6 +66,7 @@ Git plugin for git worktree.
 subcommands:
   add       run git worktree add, then copy .worktreeinclude matches
   remove    remove a worktree by path or branch name
+  update    replace this script with the latest downloaded git-wt
   help      show this help
   *         any other subcommand is passed through to git worktree
 
@@ -69,6 +75,31 @@ subcommands:
   - uses .gitignore syntax
   - only ignored paths are copied
 EOF
+}
+
+need_command() {
+	local command_name="$1"
+	if ! command -v "$command_name" >/dev/null 2>&1; then
+		printf 'missing required command: %s\n' "$command_name" >&2
+		return 1
+	fi
+}
+
+download_file() {
+	local source_url="$1"
+	local destination_path="$2"
+
+	curl -fsSL "$source_url" -o "$destination_path"
+}
+
+resolve_script_path() {
+	local script_path="${BASH_SOURCE[0]}"
+
+	if [[ "$script_path" != */* ]]; then
+		script_path="$(command -v -- "$script_path")"
+	fi
+
+	readlink -f -- "$script_path"
 }
 
 # Parse `git worktree list --porcelain` and keep only the actual
@@ -430,6 +461,25 @@ handle_remove() {
 	exec git worktree remove "${args[@]}"
 }
 
+handle_update() {
+	local script_path
+	local script_dir
+	local temp_script
+
+	need_command curl
+
+	script_path="$(resolve_script_path)"
+	script_dir="$(dirname -- "$script_path")"
+	temp_script="$(mktemp "$script_dir/.git-wt.update.XXXXXX")"
+	cleanup_files+=("$temp_script")
+
+	download_file "$RAW_BASE_URL/git-wt" "$temp_script"
+	chmod 0755 "$temp_script"
+	mv -- "$temp_script" "$script_path"
+
+	printf 'updated git-wt at %s\n' "$script_path"
+}
+
 main() {
 	local subcommand
 
@@ -449,6 +499,9 @@ main() {
 		;;
 	remove)
 		handle_remove "$@"
+		;;
+	update)
+		handle_update "$@"
 		;;
 	*)
 		exec git worktree "$subcommand" "$@"

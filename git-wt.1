@@ -20,6 +20,12 @@ For
 the final argument may be either a worktree path or a branch name.
 
 For
+.B git wt update
+the installed
+.B git-wt
+script is replaced with the latest downloaded version.
+
+For
 .B git wt add
 it first runs
 .B git worktree add
@@ -45,6 +51,11 @@ Show the built-in short help text.
 Run
 .B git worktree remove
 with a worktree path, or resolve a branch name to its worktree path first.
+.TP
+.B update
+Download the latest
+.B git-wt
+script and replace the installed executable.
 .TP
 .B *
 Any other subcommand is passed through to
@@ -74,6 +85,7 @@ git wt add ../feature-worktree
 git wt list
 git wt remove feature-worktree
 git wt remove ../feature-worktree
+git wt update
 .fi
 .SH SEE ALSO
 .BR git-worktree (1),
