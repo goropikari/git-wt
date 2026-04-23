@@ -37,6 +37,12 @@ the path matches the repository-root
 file
 .IP \(bu 2
 the path is ignored by Git in the source worktree
+
+When
+.BR rsync (1)
+is available,
+.B git wt add
+uses it for faster bulk copies; otherwise it falls back to per-path copying.
 .SH SUBCOMMANDS
 .TP
 .B add

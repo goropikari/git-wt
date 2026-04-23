@@ -11,6 +11,7 @@
 - Linux
 - `bash`
 - `git`
+- `rsync` (optional, used for faster bulk copies when available)
 
 ## Installation
 
@@ -77,6 +78,12 @@ For the curl installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/goropikari/git-wt/main/install.sh | bash -s -- --prefix /usr/local
+```
+
+To test a development branch:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/goropikari/git-wt/main/install.sh | bash -s -- --branch my-feature
 ```
 
 You can also stage an installation with `DESTDIR`:

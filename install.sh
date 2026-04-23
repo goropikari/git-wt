@@ -5,7 +5,8 @@ set -euo pipefail
 REPO_OWNER="${REPO_OWNER:-goropikari}"
 REPO_NAME="${REPO_NAME:-git-wt}"
 REPO_REF="${REPO_REF:-main}"
-RAW_BASE_URL="${RAW_BASE_URL:-https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_REF}}"
+RAW_BASE_PREFIX="${RAW_BASE_PREFIX:-https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}}"
+RAW_BASE_URL="${RAW_BASE_URL:-${RAW_BASE_PREFIX}/${REPO_REF}}"
 PREFIX="${PREFIX:-$HOME/.local}"
 BINDIR="${BINDIR:-$PREFIX/bin}"
 MANDIR="${MANDIR:-$PREFIX/share/man/man1}"
@@ -13,7 +14,7 @@ UNINSTALL=0
 
 usage() {
 	cat <<'EOF'
-usage: install.sh [--prefix DIR] [--bindir DIR] [--mandir DIR] [--ref REF] [--uninstall]
+usage: install.sh [--prefix DIR] [--bindir DIR] [--mandir DIR] [--ref REF] [--branch BRANCH] [--uninstall]
 
 Install git-wt into the current user's local directories.
 
@@ -22,6 +23,7 @@ options:
   --bindir DIR    install git-wt into DIR
   --mandir DIR    install git-wt.1 into DIR
   --ref REF       download files from a different git ref
+  --branch BRANCH download files from a branch name (same as --ref)
   --uninstall     remove installed files instead of downloading them
   -h, --help      show this help
 EOF
@@ -70,6 +72,11 @@ download_file() {
 	curl -fsSL "$source_url" -o "$destination_path"
 }
 
+set_repo_ref() {
+	REPO_REF="$1"
+	RAW_BASE_URL="${RAW_BASE_PREFIX}/${REPO_REF}"
+}
+
 install_files() {
 	local temp_dir
 
@@ -111,9 +118,8 @@ parse_args() {
 			MANDIR="$2"
 			shift 2
 			;;
-		--ref)
-			REPO_REF="$2"
-			RAW_BASE_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_REF}"
+		--ref | --branch)
+			set_repo_ref "$2"
 			shift 2
 			;;
 		--uninstall)

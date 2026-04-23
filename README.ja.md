@@ -11,6 +11,7 @@
 - Linux
 - `bash`
 - `git`
+- `rsync`（任意。利用可能なら一括コピーを高速化）
 
 ## インストール
 
@@ -77,6 +78,12 @@ curl インストーラを使う場合:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/goropikari/git-wt/main/install.sh | bash -s -- --prefix /usr/local
+```
+
+開発ブランチを試す場合:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/goropikari/git-wt/main/install.sh | bash -s -- --branch my-feature
 ```
 
 `DESTDIR` を使ったステージングもできます。

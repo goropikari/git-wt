@@ -200,6 +200,13 @@ test_copy_failure_returns_nonzero_and_preserves_worktree() {
 	git -C "$repo" add .gitignore .worktreeinclude
 	git -C "$repo" commit -m "configure copy failure" >/dev/null
 
+	cat >"$wrapper_dir/rsync" <<'EOF'
+#!/usr/bin/env bash
+printf 'simulated rsync failure\n' >&2
+exit 1
+EOF
+	chmod +x "$wrapper_dir/rsync"
+
 	cat >"$wrapper_dir/cp" <<'EOF'
 #!/usr/bin/env bash
 for arg in "$@"; do
@@ -239,6 +246,23 @@ test_install_script_installs_and_uninstalls() {
 
 	assert_not_exists "$install_root/bin/git-wt"
 	assert_not_exists "$install_root/share/man/man1/git-wt.1"
+}
+
+test_install_script_accepts_branch_option() {
+	local install_root
+	local raw_root
+
+	install_root="$TEST_TMP_ROOT/install-branch-root"
+	raw_root="$TEST_TMP_ROOT/raw"
+	mkdir -p -- "$raw_root/feature/test"
+	cp -- "$ROOT_DIR/git-wt" "$raw_root/feature/test/git-wt"
+	cp -- "$ROOT_DIR/git-wt.1" "$raw_root/feature/test/git-wt.1"
+
+	RAW_BASE_PREFIX="file://$raw_root" PREFIX="$install_root" \
+		"$ROOT_DIR/install.sh" --branch feature/test
+
+	assert_exists "$install_root/bin/git-wt"
+	assert_exists "$install_root/share/man/man1/git-wt.1"
 }
 
 test_update_replaces_installed_script() {
@@ -366,6 +390,7 @@ main() {
 	run_test test_remove_falls_back_when_existing_path_is_not_worktree
 	run_test test_remove_unknown_branch_returns_nonzero
 	run_test test_install_script_installs_and_uninstalls
+	run_test test_install_script_accepts_branch_option
 	run_test test_update_replaces_installed_script
 }
 

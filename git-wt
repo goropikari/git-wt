@@ -57,6 +57,10 @@ finish_progress() {
 	fi
 }
 
+has_command() {
+	command -v "$1" >/dev/null 2>&1
+}
+
 print_help() {
 	cat <<'EOF'
 usage: git wt <subcommand> [args...]
@@ -79,7 +83,7 @@ EOF
 
 need_command() {
 	local command_name="$1"
-	if ! command -v "$command_name" >/dev/null 2>&1; then
+	if ! has_command "$command_name"; then
 		printf 'missing required command: %s\n' "$command_name" >&2
 		return 1
 	fi
@@ -372,6 +376,84 @@ copy_target() {
 	return 1
 }
 
+copy_targets_fallback() {
+	local repo_root="$1"
+	local destination_root="$2"
+	local targets_name="$3"
+	local rel_path
+	local failed=0
+	local index=0
+	local -n targets_ref="$targets_name"
+
+	for rel_path in "${targets_ref[@]}"; do
+		index=$((index + 1))
+		emit_progress "$index" "${#targets_ref[@]}" "$rel_path"
+		if ! copy_target "$repo_root" "$destination_root" "$rel_path"; then
+			failed=$((failed + 1))
+		fi
+	done
+
+	finish_progress
+
+	if [[ "$failed" -gt 0 ]]; then
+		printf 'worktree was created at %s, but copying ignored files failed for %d path(s)\n' \
+			"$destination_root" "$failed" >&2
+		return 1
+	fi
+
+	return 0
+}
+
+copy_targets_with_rsync() {
+	local repo_root="$1"
+	local destination_root="$2"
+	local targets_name="$3"
+	local list_file
+	local rel_path
+	local index=0
+	local total=0
+	local -n targets_ref="$targets_name"
+
+	make_temp_file list_file
+	total="${#targets_ref[@]}"
+
+	for rel_path in "${targets_ref[@]}"; do
+		printf '%s\0' "$rel_path" >>"$list_file"
+	done
+
+	if ! (
+		cd "$repo_root"
+		rsync -a --ignore-existing --from0 --files-from="$list_file" \
+			--out-format='%n' ./ "$destination_root"/
+	) | while IFS= read -r rel_path; do
+		if [[ "$progress_enabled" -eq 1 ]]; then
+			index=$((index + 1))
+			emit_progress "$index" "$total" "$rel_path"
+		fi
+	done; then
+		finish_progress
+		printf 'worktree was created at %s, but bulk copy with rsync failed\n' \
+			"$destination_root" >&2
+		return 1
+	fi
+
+	finish_progress
+	return 0
+}
+
+copy_targets() {
+	local repo_root="$1"
+	local destination_root="$2"
+	local targets_name="$3"
+
+	if has_command rsync; then
+		copy_targets_with_rsync "$repo_root" "$destination_root" "$targets_name"
+		return $?
+	fi
+
+	copy_targets_fallback "$repo_root" "$destination_root" "$targets_name"
+}
+
 # `git wt add` is the only subcommand with custom behavior:
 # 1. delegate to `git worktree add`
 # 2. discover the newly created worktree
@@ -383,9 +465,6 @@ handle_add() {
 	local before_file
 	local after_file
 	local new_worktree
-	local rel_path
-	local failed=0
-	local index=0
 	local total=0
 	local -a targets=()
 
@@ -419,23 +498,7 @@ handle_add() {
 		progress_enabled=1
 	fi
 
-	for rel_path in "${targets[@]}"; do
-		index=$((index + 1))
-		emit_progress "$index" "$total" "$rel_path"
-		if ! copy_target "$repo_root" "$new_worktree" "$rel_path"; then
-			failed=$((failed + 1))
-		fi
-	done
-
-	finish_progress
-
-	if [[ "$failed" -gt 0 ]]; then
-		printf 'worktree was created at %s, but copying ignored files failed for %d path(s)\n' \
-			"$new_worktree" "$failed" >&2
-		return 1
-	fi
-
-	return 0
+	copy_targets "$repo_root" "$new_worktree" targets
 }
 
 handle_remove() {
